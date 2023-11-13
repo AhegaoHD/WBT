@@ -1,0 +1,14 @@
+[Application]
+Name = "MM_Wallet"
+Version = "1.0.0"
+
+[DB]
+Name = "mmwt"
+Host = "telegram-wallet.space"
+Port = "5433"
+Schema = "public"
+MaxPoolSize = 10
+
+[HttpServer]
+ShutdownTimeout = 5
+
