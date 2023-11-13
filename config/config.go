@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -11,6 +12,7 @@ type (
 		App        App        `toml:"Application"`
 		Db         Db         `toml:"DB"`
 		HttpServer HttpServer `toml:"HttpServer"`
+		SecretJWT  string     `env:"SecretJWT"`
 	}
 
 	App struct {
@@ -43,5 +45,7 @@ func Parse(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	conf.SecretJWT = os.Getenv("SecretJWT")
 	return &conf, nil
 }

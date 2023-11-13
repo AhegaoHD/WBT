@@ -1,11 +1,11 @@
 [Application]
-Name = "MM_Wallet"
+Name = "WBT"
 Version = "1.0.0"
 
 [DB]
-Name = "mmwt"
-Host = "telegram-wallet.space"
-Port = "5433"
+Name = "WBT"
+Host = "localhost"
+Port = "5435"
 Schema = "public"
 MaxPoolSize = 10
 
