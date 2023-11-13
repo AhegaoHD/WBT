@@ -1,4 +1,4 @@
-package service
+package userService
 
 import (
 	"context"
@@ -31,59 +31,49 @@ type customerRepository interface {
 	CreateCustomer(ctx context.Context, customer *models.Customer, tx pgx.Tx) error
 	HasCustomers(ctx context.Context, tx pgx.Tx) (bool, error)
 	GetCustomerByID(ctx context.Context, customerID uuid.UUID) (*models.Customer, error)
-
-	GetCustomerByIDForUpdate(ctx context.Context, customerID uuid.UUID, tx pgx.Tx) (*models.Customer, error)
-	UpdateCustomer(ctx context.Context, customer *models.Customer, tx pgx.Tx) error
 }
 
 type loaderRepository interface {
 	CreateLoader(ctx context.Context, loader *models.Loader, tx pgx.Tx) error
 	GetLoaderByID(ctx context.Context, loaderID uuid.UUID) (*models.Loader, error)
 	GetLoaders(ctx context.Context) ([]models.Loader, error)
-
-	GetLoadersByIDsForUpdate(ctx context.Context, loaderIDs []uuid.UUID, tx pgx.Tx) ([]models.Loader, error)
-	UpdateLoaders(ctx context.Context, loaders []models.Loader, tx pgx.Tx) error
 }
 
 type taskRepository interface {
 	CreateTasks(ctx context.Context, tasks []models.Task, tx pgx.Tx) error
 	GetTasksCustomers(ctx context.Context, customerID uuid.UUID) ([]models.Task, error)
 	GetTasksLoaders(ctx context.Context, loaderID uuid.UUID) ([]models.Task, error)
-
-	GetTaskByIDForUpdate(ctx context.Context, taskID uuid.UUID, tx pgx.Tx) (*models.Task, error)
-	UpdateTask(ctx context.Context, task *models.Task, tx pgx.Tx) error
-	CreateTaskLoaders(ctx context.Context, taskID uuid.UUID, loaderIDs []uuid.UUID, tx pgx.Tx) error
 }
 
 func NewUserService(db *postgres.Postgres, userRepository userRepository, customerRepository customerRepository, loaderRepository loaderRepository, taskRepository taskRepository) *UserService {
 	return &UserService{db: db, userRepository: userRepository, customerRepository: customerRepository, loaderRepository: loaderRepository, taskRepository: taskRepository}
 }
 
-func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
+func (s *UserService) CreateUser(ctx context.Context, user *models.User) (*models.User, error) {
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
 	exist, err := s.userRepository.UsernameExists(ctx, user.Username, tx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if exist == true {
-		return errors.New("username exist")
+		return nil, errors.New("username exist")
 	}
 
 	// Хеширование пароля
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	user.Password = string(hashedPassword)
 
 	user, err = s.userRepository.CreateUser(ctx, user, tx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	rand.Seed(time.Now().UnixNano())
@@ -92,10 +82,10 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
 	case "customer":
 		exist, err := s.customerRepository.HasCustomers(ctx, tx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if exist == true {
-			return errors.New("exist")
+			return nil, errors.New("exist")
 		}
 
 		customer := &models.Customer{
@@ -104,7 +94,7 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
 		}
 		err = s.customerRepository.CreateCustomer(ctx, customer, tx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		taskCount := rand.Intn(5) + 1
@@ -119,7 +109,7 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
 		}
 		err = s.taskRepository.CreateTasks(ctx, tasks, tx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 	case "loader":
@@ -136,15 +126,15 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
 		}
 		err = s.loaderRepository.CreateLoader(ctx, loader, tx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	err = tx.Commit(ctx) // Завершаем транзакцию после всех операций
 	if err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	return nil
+	return user, nil
 }
 
 func (s *UserService) AuthenticateUser(ctx context.Context, credentials *models.User) (*models.User, error) {

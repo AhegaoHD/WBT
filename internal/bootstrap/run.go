@@ -4,9 +4,16 @@ import (
 	"context"
 	"fmt"
 	"github.com/AhegaoHD/WBT/config"
-	httpController "github.com/AhegaoHD/WBT/internal/controller/http"
-	"github.com/AhegaoHD/WBT/internal/repository"
-	"github.com/AhegaoHD/WBT/internal/service"
+	"github.com/AhegaoHD/WBT/internal/controller/http/authController"
+	"github.com/AhegaoHD/WBT/internal/controller/http/middleware"
+	httpController "github.com/AhegaoHD/WBT/internal/controller/http/userController"
+	"github.com/AhegaoHD/WBT/internal/repository/customerRepository"
+	"github.com/AhegaoHD/WBT/internal/repository/loaderRepository"
+	"github.com/AhegaoHD/WBT/internal/repository/taskRepository"
+	"github.com/AhegaoHD/WBT/internal/repository/userRepository"
+	"github.com/AhegaoHD/WBT/internal/service/jwtService"
+	"github.com/AhegaoHD/WBT/internal/service/taskService"
+	"github.com/AhegaoHD/WBT/internal/service/userService"
 	"github.com/AhegaoHD/WBT/pkg/httpserver"
 	"github.com/AhegaoHD/WBT/pkg/postgres"
 	"github.com/gorilla/mux"
@@ -29,21 +36,23 @@ func Run(cfg *config.Config) {
 		return
 	}
 
-	userRepository := repository.NewUserRepository(pg)
-	customerRepository := repository.NewCustomerRepository(pg)
-	loaderRepository := repository.NewLoaderRepository(pg)
-	taskRepository := repository.NewTaskRepository(pg)
+	userRepositoryInstance := userRepository.NewUserRepository(pg)
+	customerRepositoryInstance := customerRepository.NewCustomerRepository(pg)
+	loaderRepositoryInstance := loaderRepository.NewLoaderRepository(pg)
+	taskRepositoryInstance := taskRepository.NewTaskRepository(pg)
 
-	userService := service.NewUserService(pg, userRepository, customerRepository, loaderRepository, taskRepository)
-	taskService := service.NewTaskService(pg, taskRepository, loaderRepository, userRepository, customerRepository)
+	userServiceInstance := userService.NewUserService(pg, userRepositoryInstance, customerRepositoryInstance, loaderRepositoryInstance, taskRepositoryInstance)
+	taskServiceInstance := taskService.NewTaskService(pg, taskRepositoryInstance, loaderRepositoryInstance, customerRepositoryInstance)
+	jwtServiceInstance := jwtService.NewJWTService(cfg.SecretJWT)
 
 	r := mux.NewRouter()
+	middlewareInstance := middleware.NewJWTMiddleware(jwtServiceInstance)
 
-	authController := httpController.NewAuthController(userService)
-	authController.RegisterRoutes(r)
+	authControllerInstance := authController.NewAuthController(userServiceInstance, jwtServiceInstance)
+	authControllerInstance.RegisterRoutes(r)
 
-	userController := httpController.NewUsersController(userService, taskService)
-	userController.RegisterRoutes(r)
+	userControllerInstance := httpController.NewUsersController(userServiceInstance, taskServiceInstance, middlewareInstance)
+	userControllerInstance.RegisterRoutes(r)
 
 	httpServer := httpserver.New(r,
 		httpserver.Port(cfg.HttpServer.Addr),

@@ -1,29 +1,31 @@
-package httpController
+package authController
 
 import (
 	"context"
 	"encoding/json"
-	"github.com/AhegaoHD/WBT/internal/auth"
 	"github.com/AhegaoHD/WBT/internal/models"
 	"github.com/gorilla/mux"
-	"log"
 	"net/http"
 )
 
 type AuthController struct {
 	userService userService
+	jwtService  jwtService
 }
 
 type userService interface {
-	CreateUser(ctx context.Context, user *models.User) error
+	CreateUser(ctx context.Context, user *models.User) (*models.User, error)
 	AuthenticateUser(ctx context.Context, credentials *models.User) (*models.User, error)
-	GetUserDetails(ctx context.Context, user *models.User) (interface{}, error)
-	GetUserTasks(ctx context.Context, user *models.User) (interface{}, error)
 }
 
-func NewAuthController(userService userService) *AuthController {
+type jwtService interface {
+	GenerateToken(user *models.User) (string, error)
+}
+
+func NewAuthController(userService userService, jwtService jwtService) *AuthController {
 	return &AuthController{
 		userService: userService,
+		jwtService:  jwtService,
 	}
 }
 
@@ -41,16 +43,20 @@ func (c *AuthController) RegisterHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	err = c.userService.CreateUser(r.Context(), user)
+	err = validateRegister(user)
 	if err != nil {
-		log.Println(err)
-		http.Error(w, "Err", http.StatusUnauthorized)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	user, err = c.userService.CreateUser(r.Context(), user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
 	// Генерация JWT токена
-	token, err := auth.GenerateToken(user)
+	token, err := c.jwtService.GenerateToken(user)
 	if err != nil {
 		http.Error(w, "Error generating token", http.StatusInternalServerError)
 		return
@@ -62,7 +68,7 @@ func (c *AuthController) RegisterHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *AuthController) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	var credentials models.User
+	var credentials *models.User
 
 	// Декодирование запроса
 	err := json.NewDecoder(r.Body).Decode(&credentials)
@@ -71,14 +77,14 @@ func (c *AuthController) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := c.userService.AuthenticateUser(r.Context(), &credentials)
+	user, err := c.userService.AuthenticateUser(r.Context(), credentials)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
 	// Генерация JWT токена
-	token, err := auth.GenerateToken(user)
+	token, err := c.jwtService.GenerateToken(user)
 	if err != nil {
 		http.Error(w, "Error generating token", http.StatusInternalServerError)
 		return

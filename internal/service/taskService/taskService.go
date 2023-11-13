@@ -1,4 +1,4 @@
-package service
+package taskService
 
 import (
 	"context"
@@ -6,18 +6,35 @@ import (
 	"fmt"
 	"github.com/AhegaoHD/WBT/internal/models"
 	"github.com/AhegaoHD/WBT/pkg/postgres"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type TaskService struct {
 	db                 *postgres.Postgres
 	taskRepository     taskRepository
 	loaderRepository   loaderRepository
-	userRepository     userRepository
 	customerRepository customerRepository
 }
 
-func NewTaskService(db *postgres.Postgres, taskRepository taskRepository, loaderRepository loaderRepository, userRepository userRepository, customerRepository customerRepository) *TaskService {
-	return &TaskService{db: db, taskRepository: taskRepository, loaderRepository: loaderRepository, userRepository: userRepository, customerRepository: customerRepository}
+type customerRepository interface {
+	GetCustomerByIDForUpdate(ctx context.Context, customerID uuid.UUID, tx pgx.Tx) (*models.Customer, error)
+	UpdateCustomer(ctx context.Context, customer *models.Customer, tx pgx.Tx) error
+}
+
+type loaderRepository interface {
+	GetLoadersByIDsForUpdate(ctx context.Context, loaderIDs []uuid.UUID, tx pgx.Tx) ([]models.Loader, error)
+	UpdateLoaders(ctx context.Context, loaders []models.Loader, tx pgx.Tx) error
+}
+
+type taskRepository interface {
+	GetTaskByIDForUpdate(ctx context.Context, taskID uuid.UUID, tx pgx.Tx) (*models.Task, error)
+	UpdateTask(ctx context.Context, task *models.Task, tx pgx.Tx) error
+	CreateTaskLoaders(ctx context.Context, taskID uuid.UUID, loaderIDs []uuid.UUID, tx pgx.Tx) error
+}
+
+func NewTaskService(db *postgres.Postgres, taskRepository taskRepository, loaderRepository loaderRepository, customerRepository customerRepository) *TaskService {
+	return &TaskService{db: db, taskRepository: taskRepository, loaderRepository: loaderRepository, customerRepository: customerRepository}
 }
 
 func (s *TaskService) StartTask(ctx context.Context, req *models.StartTaskRequest) error {
@@ -35,6 +52,9 @@ func (s *TaskService) StartTask(ctx context.Context, req *models.StartTaskReques
 	task, err := s.taskRepository.GetTaskByIDForUpdate(ctx, req.TaskID, tx)
 	if err != nil {
 		return err
+	}
+	if task.Status {
+		return errors.New("уже выполнена")
 	}
 	if task.CustomerID != req.User.UserID {
 		return errors.New("task.CustomerID != req.User.UserID")
