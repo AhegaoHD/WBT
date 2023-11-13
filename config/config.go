@@ -46,6 +46,6 @@ func Parse(path string) (*Config, error) {
 		return nil, err
 	}
 
-	conf.SecretJWT = os.Getenv("SecretJWT")
+	conf.SecretJWT = os.Getenv("SECRETJWT")
 	return &conf, nil
 }
